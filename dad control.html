@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Dad Control</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            background: #0a0a0f;
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
+            color: #fff;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
+        }
+
+        .app-container {
+            display: flex;
+            flex-direction: row;
+            width: 100vw;
+            height: 100vh;
+            height: 100dvh;
+        }
+
+        /* Видео панель */
+        .video-section {
+            flex: 0 0 40%;
+            background: #000;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .video-feed {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            opacity: 0.3;
+            transition: opacity 0.5s;
+        }
+        
+        /* iPad - поворачиваем видео */
+        .video-feed.rotate-video {
+            height: 100%;
+            width: auto;
+            transform: rotate(90deg) scale(1.78);
+        }
+        
+        .video-feed.connected {
+            opacity: 1;
+        }
+
+        /* HUD */
+        .hud {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            padding: 12px;
+        }
+        .hud-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+        .hud-status-box {
+            background: rgba(0,0,0,0.7);
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-family: 'SF Mono', monospace;
+            font-size: 10px;
+            max-width: 90%;
+        }
+        .hud-bottom {
+            position: absolute;
+            bottom: 12px;
+            left: 12px;
+            right: 12px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            font-family: 'SF Mono', monospace;
+        }
+        .status-ok { color: #22c55e; }
+        .status-error { color: #ef4444; }
+        .status-retry { color: #f97316; }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+        .blink { animation: blink 0.5s infinite; }
+        
+        .crosshair {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: 30px; height: 30px;
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 50%;
+        }
+        .crosshair::after {
+            content: '';
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: 6px; height: 6px;
+            background: #ef4444;
+            border-radius: 50%;
+        }
+        
+        /* Кнопка переподключения */
+        .reconnect-btn {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            background: rgba(34, 197, 94, 0.3);
+            border: 1px solid rgba(34, 197, 94, 0.6);
+            color: #22c55e;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 11px;
+            font-weight: 700;
+            cursor: pointer;
+            z-index: 20;
+            pointer-events: auto;
+        }
+        .reconnect-btn:active {
+            transform: scale(0.95);
+        }
+
+        /* Панель управления */
+        .control-section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 12px;
+            background: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 100%);
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 4px 8px 12px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            margin-bottom: 12px;
+        }
+        .logo {
+            font-size: 20px;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+        }
+        .logo span { color: #22c55e; }
+        .status-badge {
+            font-size: 10px;
+            font-family: 'SF Mono', monospace;
+            padding: 6px 12px;
+            background: rgba(0,0,0,0.4);
+            border-radius: 6px;
+            color: #22c55e;
+        }
+
+        /* Сетка кнопок */
+        .controls-grid {
+            flex: 1;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            grid-template-rows: repeat(3, 1fr) 0.6fr;
+            gap: 8px;
+        }
+
+        .btn {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 16px;
+            color: #fff;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            transition: all 0.15s;
+            cursor: pointer;
+        }
+        .btn:active {
+            transform: scale(0.95);
+            background: rgba(255,255,255,0.08);
+        }
+        .btn svg {
+            width: 28px;
+            height: 28px;
+            margin-bottom: 6px;
+            stroke-width: 1.5;
+        }
+
+        .btn-pink svg { color: #ec4899; }
+        .btn-pink span { color: #f9a8d4; }
+        .btn-blue svg { color: #3b82f6; }
+        .btn-blue span { color: #93c5fd; }
+        .btn-orange svg { color: #f97316; }
+        .btn-orange span { color: #fdba74; }
+        .btn-cyan svg { color: #06b6d4; }
+        .btn-cyan span { color: #67e8f9; }
+        .btn-purple svg { color: #a855f7; }
+        .btn-purple span { color: #d8b4fe; }
+        .btn-emerald svg { color: #10b981; }
+        .btn-emerald span { color: #6ee7b7; }
+
+        .btn-stop {
+            background: rgba(239, 68, 68, 0.1);
+            border-color: rgba(239, 68, 68, 0.3);
+        }
+        .btn-stop svg { color: #ef4444; }
+        .btn-stop span { color: #fca5a5; }
+        .btn-stop:active {
+            background: rgba(239, 68, 68, 0.3);
+        }
+
+        .btn.active {
+            background: rgba(34, 197, 94, 0.15);
+            border-color: #22c55e;
+            box-shadow: 0 0 20px rgba(34, 197, 94, 0.3);
+        }
+        .btn.active svg { color: #22c55e !important; }
+        .btn.active span { color: #86efac !important; }
+
+        .bottom-row {
+            grid-column: span 3;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .pulse { animation: pulse 1.5s infinite; }
+
+        /* Портретный режим */
+        @media (orientation: portrait) {
+            .app-container {
+                flex-direction: column;
+            }
+            .video-section {
+                flex: 0 0 45%;
+            }
+            .control-section {
+                flex: 0 0 55%;
+                padding: 10px;
+            }
+            .controls-grid { gap: 6px; }
+            .btn {
+                border-radius: 12px;
+                font-size: 10px;
+            }
+            .btn svg {
+                width: 22px;
+                height: 22px;
+                margin-bottom: 4px;
+            }
+        }
+
+        /* Большие экраны */
+        @media (orientation: landscape) and (min-width: 1100px) {
+            .controls-grid { gap: 12px; }
+            .btn { 
+                border-radius: 20px; 
+                font-size: 12px;
+            }
+            .btn svg { 
+                width: 36px; 
+                height: 36px; 
+                margin-bottom: 8px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <!-- ВИДЕО -->
+        <section class="video-section">
+            <img id="videoStream" class="video-feed" src="" alt="">
+            
+            <div class="hud">
+                <div class="hud-top">
+                    <div class="hud-status-box">
+                        <div id="camStatus" class="status-retry">ЗАПУСК...</div>
+                        <div id="debugInfo" style="color: #666; margin-top: 4px; font-size: 9px;"></div>
+                    </div>
+                </div>
+                <button class="reconnect-btn" onclick="startConnection()">RECONNECT</button>
+                <div class="crosshair"></div>
+                <div class="hud-bottom">
+                    <span id="retryInfo" style="color: rgba(255,255,255,0.4)">...</span>
+                    <span id="deviceType" style="color: rgba(255,255,255,0.4)">...</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- УПРАВЛЕНИЕ -->
+        <section class="control-section">
+            <div class="header">
+                <div class="logo">DAD/<span>CTRL</span></div>
+                <div id="log" class="status-badge">READY</div>
+            </div>
+
+            <div class="controls-grid">
+                <button class="btn btn-pink" onclick="action('Обнимашки!', 'ОБНЯТЬ')">
+                    <i data-lucide="heart"></i>
+                    <span>Обнять</span>
+                </button>
+                <button id="btn-up" class="btn btn-blue direction" onclick="direction('btn-up', 'Вперёд!', 'ВПЕРЁД')">
+                    <i data-lucide="chevron-up"></i>
+                    <span>Вперёд</span>
+                </button>
+                <button class="btn btn-orange" onclick="action('Случайное!', 'СЛУЧАЙНОЕ')">
+                    <i data-lucide="dices"></i>
+                    <span>Случайное</span>
+                </button>
+
+                <button id="btn-left" class="btn btn-blue direction" onclick="direction('btn-left', 'Налево!', 'ВЛЕВО')">
+                    <i data-lucide="chevron-left"></i>
+                    <span>Влево</span>
+                </button>
+                <button class="btn btn-stop" onclick="stopAll()">
+                    <i data-lucide="octagon"></i>
+                    <span>СТОП</span>
+                </button>
+                <button id="btn-right" class="btn btn-blue direction" onclick="direction('btn-right', 'Направо!', 'ВПРАВО')">
+                    <i data-lucide="chevron-right"></i>
+                    <span>Вправо</span>
+                </button>
+
+                <button class="btn btn-cyan" onclick="action('Голос!', 'ГОЛОС')">
+                    <i data-lucide="mic"></i>
+                    <span>Голос</span>
+                </button>
+                <button id="btn-down" class="btn btn-blue direction" onclick="direction('btn-down', 'Назад!', 'НАЗАД')">
+                    <i data-lucide="chevron-down"></i>
+                    <span>Назад</span>
+                </button>
+                <button class="btn btn-purple" onclick="action('Карман!', 'КАРМАН')">
+                    <i data-lucide="package"></i>
+                    <span>Карман</span>
+                </button>
+
+                <div class="bottom-row">
+                    <button class="btn btn-emerald" onclick="action('Взять!', 'ВЗЯТЬ')">
+                        <i data-lucide="grab"></i>
+                        <span>Взять/Бросить</span>
+                    </button>
+                    <button class="btn btn-purple" onclick="action('Действие!', 'ДЕЙСТВИЕ')">
+                        <i data-lucide="zap"></i>
+                        <span>Действие</span>
+                    </button>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        // ╔════════════════════════════════════════════════════════════╗
+        // ║  НАСТРОЙКИ КАМЕРЫ - МЕНЯЙ ЗДЕСЬ                            ║
+        // ╚════════════════════════════════════════════════════════════╝
+        const CAM_IP = "192.168.1.178";
+        const CAM_PORT = "8081";
+        const CAM_USER = "admin";
+        const CAM_PASS = "admin";
+        // ════════════════════════════════════════════════════════════════
+
+        lucide.createIcons();
+
+        // Определяем устройство
+        const isIPhone = /iPhone/.test(navigator.userAgent);
+        const isIPad = /iPad/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        document.getElementById('deviceType').textContent = isIPhone ? 'iPhone' : (isIPad ? 'iPad' : 'Desktop');
+        
+        // Для iPad поворачиваем видео
+        if (isIPad) {
+            document.getElementById('videoStream').classList.add('rotate-video');
+        }
+
+        // Все варианты URL которые будем пробовать
+        function getUrls() {
+            const base = `${CAM_IP}:${CAM_PORT}`;
+            const auth = `${encodeURIComponent(CAM_USER)}:${encodeURIComponent(CAM_PASS)}`;
+            return [
+                // С авторизацией в URL
+                `http://${auth}@${base}/video`,
+                `http://${auth}@${base}/stream`,
+                `http://${auth}@${base}/videofeed`,
+                `http://${auth}@${base}/mjpegfeed`,
+                // Без авторизации (если браузер запомнил)
+                `http://${base}/video`,
+                `http://${base}/stream`,
+            ];
+        }
+
+        let currentUrlIndex = 0;
+        let retryCount = 0;
+        const MAX_RETRIES = 10;
+        const RETRY_DELAY = 2000;
+        let isConnected = false;
+
+        const statusEl = document.getElementById('camStatus');
+        const debugEl = document.getElementById('debugInfo');
+        const retryEl = document.getElementById('retryInfo');
+        const img = document.getElementById('videoStream');
+
+        function updateStatus(text, type) {
+            statusEl.textContent = text;
+            statusEl.className = type === 'ok' ? 'status-ok' : (type === 'error' ? 'status-error' : 'status-retry');
+            if (type === 'retry') statusEl.classList.add('blink');
+        }
+
+        function tryNextUrl() {
+            if (isConnected) return;
+            
+            const urls = getUrls();
+            retryCount++;
+            
+            if (retryCount > MAX_RETRIES) {
+                updateStatus('НЕТ СВЯЗИ', 'error');
+                retryEl.textContent = `Попыток: ${retryCount}`;
+                debugEl.textContent = 'Жми RECONNECT';
+                // Автоматически перезапускаем через 10 сек
+                setTimeout(() => {
+                    if (!isConnected) startConnection();
+                }, 10000);
+                return;
+            }
+            
+            const url = urls[currentUrlIndex % urls.length];
+            currentUrlIndex++;
+            
+            // Показываем URL без пароля
+            const displayUrl = url.replace(/:([^:@]+)@/, ':***@');
+            debugEl.textContent = displayUrl;
+            retryEl.textContent = `Попытка ${retryCount}/${MAX_RETRIES}`;
+            updateStatus(`ПОПЫТКА ${retryCount}...`, 'retry');
+            
+            // Очищаем предыдущий src
+            img.src = '';
+            
+            // Устанавливаем таймаут на эту попытку
+            const timeout = setTimeout(() => {
+                if (!isConnected) {
+                    console.log(`Timeout for: ${displayUrl}`);
+                    tryNextUrl();
+                }
+            }, RETRY_DELAY);
+            
+            img.onerror = () => {
+                clearTimeout(timeout);
+                if (!isConnected) {
+                    console.log(`Error for: ${displayUrl}`);
+                    setTimeout(tryNextUrl, 500);
+                }
+            };
+            
+            img.onload = () => {
+                clearTimeout(timeout);
+                isConnected = true;
+                updateStatus('ONLINE', 'ok');
+                debugEl.textContent = displayUrl;
+                retryEl.textContent = 'Подключено';
+                img.classList.add('connected');
+                updateLog('КАМЕРА OK');
+                console.log(`Connected with: ${displayUrl}`);
+            };
+            
+            img.src = url;
+        }
+
+        function startConnection() {
+            isConnected = false;
+            currentUrlIndex = 0;
+            retryCount = 0;
+            img.classList.remove('connected');
+            updateStatus('ПОДКЛЮЧЕНИЕ...', 'retry');
+            updateLog('CONNECTING...');
+            tryNextUrl();
+        }
+
+        // Speech
+        const synth = window.speechSynthesis;
+        let voices = [];
+        function loadVoices() { voices = synth.getVoices(); }
+        if (speechSynthesis.onvoiceschanged !== undefined) {
+            speechSynthesis.onvoiceschanged = loadVoices;
+        }
+        loadVoices();
+
+        function speak(text) {
+            synth.cancel();
+            const u = new SpeechSynthesisUtterance(text);
+            const ruVoice = voices.find(v => v.lang.includes('ru'));
+            if (ruVoice) u.voice = ruVoice;
+            u.rate = 1.1;
+            u.pitch = 0.9;
+            synth.speak(u);
+        }
+
+        function updateLog(text) {
+            document.getElementById('log').textContent = text;
+        }
+
+        function action(speech, log) {
+            if (navigator.vibrate) navigator.vibrate(50);
+            speak(speech);
+            updateLog(log);
+        }
+
+        function direction(btnId, speech, log) {
+            if (navigator.vibrate) navigator.vibrate(50);
+            const btn = document.getElementById(btnId);
+            
+            if (btn.classList.contains('active')) {
+                btn.classList.remove('active');
+                speak('Стоп!');
+                updateLog('СТОП');
+                return;
+            }
+            
+            document.querySelectorAll('.direction').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            speak(speech);
+            updateLog(log);
+        }
+
+        function stopAll() {
+            if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+            document.querySelectorAll('.direction').forEach(b => b.classList.remove('active'));
+            speak('Стоп! Полная остановка!');
+            updateLog('СТОП');
+        }
+
+        // Автостарт при загрузке
+        window.addEventListener('load', () => {
+            setTimeout(startConnection, 500);
+        });
+    </script>
+</body>
+</html>
